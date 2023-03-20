@@ -31,6 +31,7 @@ use crate::{
     },
 };
 
+use crate::ui::ScoringStrategy;
 use std::{
     cmp::Ordering, collections::BTreeMap, fmt::Write, future::Future, path::PathBuf, sync::Arc,
 };
@@ -215,7 +216,7 @@ fn sym_picker(
     offset_encoding: OffsetEncoding,
 ) -> FilePicker<lsp::SymbolInformation> {
     // TODO: drop current_path comparison and instead use workspace: bool flag?
-    FilePicker::new(
+    FilePicker::new_with_strategy(
         symbols,
         current_path.clone(),
         move |cx, symbol, action| {
@@ -252,6 +253,7 @@ fn sym_picker(
             }
         },
         move |_editor, symbol| Some(location_to_file_location(&symbol.location)),
+        ScoringStrategy::Equal,
     )
     .truncate_start(false)
 }

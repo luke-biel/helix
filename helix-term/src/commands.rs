@@ -590,6 +590,7 @@ fn move_impl(cx: &mut Context, move_fn: MoveFn, dir: Direction, behaviour: Movem
     doc.set_selection(view.id, selection);
 }
 
+use crate::ui::ScoringStrategy;
 use helix_core::movement::{move_horizontally, move_vertically};
 
 fn move_char_left(cx: &mut Context) {
@@ -2639,32 +2640,37 @@ pub fn command_palette(cx: &mut Context) {
                 }
             }));
 
-            let picker = Picker::new(commands, keymap, move |cx, command, _action| {
-                let mut ctx = Context {
-                    register: None,
-                    count: std::num::NonZeroUsize::new(1),
-                    editor: cx.editor,
-                    callback: None,
-                    on_next_key_callback: None,
-                    jobs: cx.jobs,
-                };
-                let focus = view!(ctx.editor).id;
+            let picker = Picker::new(
+                commands,
+                keymap,
+                move |cx, command, _action| {
+                    let mut ctx = Context {
+                        register: None,
+                        count: std::num::NonZeroUsize::new(1),
+                        editor: cx.editor,
+                        callback: None,
+                        on_next_key_callback: None,
+                        jobs: cx.jobs,
+                    };
+                    let focus = view!(ctx.editor).id;
 
-                command.execute(&mut ctx);
+                    command.execute(&mut ctx);
 
-                if ctx.editor.tree.contains(focus) {
-                    let config = ctx.editor.config();
-                    let mode = ctx.editor.mode();
-                    let view = view_mut!(ctx.editor, focus);
-                    let doc = doc_mut!(ctx.editor, &view.doc);
+                    if ctx.editor.tree.contains(focus) {
+                        let config = ctx.editor.config();
+                        let mode = ctx.editor.mode();
+                        let view = view_mut!(ctx.editor, focus);
+                        let doc = doc_mut!(ctx.editor, &view.doc);
 
-                    view.ensure_cursor_in_view(doc, config.scrolloff);
+                        view.ensure_cursor_in_view(doc, config.scrolloff);
 
-                    if mode != Mode::Insert {
-                        doc.append_changes_to_history(view);
+                        if mode != Mode::Insert {
+                            doc.append_changes_to_history(view);
+                        }
                     }
-                }
-            });
+                },
+                ScoringStrategy::default(),
+            );
             compositor.push(Box::new(overlayed(picker)));
         },
     ));

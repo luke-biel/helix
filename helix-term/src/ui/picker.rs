@@ -19,7 +19,6 @@ use tui::{
 
 use fuzzy_matcher::skim::SkimMatcherV2 as Matcher;
 use tui::widgets::Widget;
-
 use std::cmp::{self, Ordering};
 use std::{collections::HashMap, io::Read, path::PathBuf};
 
@@ -129,8 +128,24 @@ impl<T: Item> FilePicker<T> {
         callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
         preview_fn: impl Fn(&Editor, &T) -> Option<FileLocation> + 'static,
     ) -> Self {
+        Self::new_with_strategy(
+            options,
+            editor_data,
+            callback_fn,
+            preview_fn,
+            ScoringStrategy::default(),
+        )
+    }
+
+    pub fn new_with_strategy(
+        options: Vec<T>,
+        editor_data: T::Data,
+        callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
+        preview_fn: impl Fn(&Editor, &T) -> Option<FileLocation> + 'static,
+        scoring_strategy: ScoringStrategy,
+    ) -> Self {
         let truncate_start = true;
-        let mut picker = Picker::new(options, editor_data, callback_fn);
+        let mut picker = Picker::new(options, editor_data, callback_fn, scoring_strategy);
         picker.truncate_start = truncate_start;
 
         Self {
@@ -402,6 +417,36 @@ impl Ord for PickerMatch {
 
 type PickerCallback<T> = Box<dyn Fn(&mut Context, &T, Action)>;
 
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub enum ScoringStrategy {
+    #[default]
+    Fuzzy,
+    Equal,
+}
+
+impl ScoringStrategy {
+    pub fn scorer(&self, query: &str) -> Scorer {
+        match self {
+            ScoringStrategy::Fuzzy => Scorer::Fuzzy(FuzzyQuery::new(query)),
+            ScoringStrategy::Equal => Scorer::Equal,
+        }
+    }
+}
+
+pub enum Scorer {
+    Fuzzy(FuzzyQuery),
+    Equal,
+}
+
+impl Scorer {
+    pub fn score(&self, text: &str, matcher: &Matcher) -> Option<i64> {
+        match self {
+            Scorer::Fuzzy(query) => query.fuzzy_match(text, matcher),
+            Scorer::Equal => Some(0),
+        }
+    }
+}
+
 pub struct Picker<T: Item> {
     options: Vec<T>,
     editor_data: T::Data,
@@ -422,6 +467,7 @@ pub struct Picker<T: Item> {
     show_preview: bool,
     /// Constraints for tabular formatting
     widths: Vec<Constraint>,
+    scoring_strategy: ScoringStrategy,
 
     callback_fn: PickerCallback<T>,
 }
@@ -431,6 +477,7 @@ impl<T: Item> Picker<T> {
         options: Vec<T>,
         editor_data: T::Data,
         callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
+        scoring_strategy: ScoringStrategy,
     ) -> Self {
         let prompt = Prompt::new(
             "".into(),
@@ -452,6 +499,7 @@ impl<T: Item> Picker<T> {
             callback_fn: Box::new(callback_fn),
             completion_height: 0,
             widths: Vec::new(),
+            scoring_strategy,
         };
 
         picker.calculate_column_widths();
@@ -560,7 +608,7 @@ impl<T: Item> Picker<T> {
     pub fn force_score(&mut self) {
         let pattern = self.prompt.line();
 
-        let query = FuzzyQuery::new(pattern);
+        let scorer = self.scoring_strategy.scorer(pattern);
         self.matches.clear();
         self.matches.extend(
             self.options
@@ -569,13 +617,11 @@ impl<T: Item> Picker<T> {
                 .filter_map(|(index, option)| {
                     let text = option.filter_text(&self.editor_data);
 
-                    query
-                        .fuzzy_match(&text, &self.matcher)
-                        .map(|score| PickerMatch {
-                            index,
-                            score,
-                            len: text.chars().count(),
-                        })
+                    scorer.score(&text, &self.matcher).map(|score| PickerMatch {
+                        index,
+                        score,
+                        len: text.chars().count(),
+                    })
                 }),
         );
 

@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, bail};
 
+use crate::ui::ScoringStrategy;
 use helix_view::handlers::dap::{breakpoints_changed, jump_to_stack_frame, select_thread_id};
 
 impl ui::menu::Item for StackFrame {
@@ -286,6 +287,7 @@ pub fn dap_launch(cx: &mut Context) {
             });
             cx.jobs.callback(callback);
         },
+        ScoringStrategy::default(),
     ))));
 }
 

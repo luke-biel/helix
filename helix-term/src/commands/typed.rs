@@ -5,6 +5,7 @@ use crate::job::Job;
 
 use super::*;
 
+use crate::ui::ScoringStrategy;
 use helix_core::{encoding, shellwords::Shellwords};
 use helix_view::document::DEFAULT_LANGUAGE_NAME;
 use helix_view::editor::{Action, CloseError, ConfigEvent};
@@ -1332,9 +1333,14 @@ fn lsp_workspace_command(
         let callback = async move {
             let call: job::Callback = Callback::EditorCompositor(Box::new(
                 move |_editor: &mut Editor, compositor: &mut Compositor| {
-                    let picker = ui::Picker::new(commands, (), |cx, command, _action| {
-                        execute_lsp_command(cx.editor, command.clone());
-                    });
+                    let picker = ui::Picker::new(
+                        commands,
+                        (),
+                        |cx, command, _action| {
+                            execute_lsp_command(cx.editor, command.clone());
+                        },
+                        ScoringStrategy::default(),
+                    );
                     compositor.push(Box::new(overlayed(picker)))
                 },
             ));
